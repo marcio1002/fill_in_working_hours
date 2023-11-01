@@ -1,0 +1,19 @@
+{
+    "name": "marcio/fill_in_working_hours",
+    "description": "Preencher horas de trabalho na Gebit",
+    "require": {
+        "php": "^8.0.1",
+        "phpoffice/phpspreadsheet": "^1.29"
+    },
+    "autoload": {
+        "psr-4": {
+            "Marcio1002\\Work\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "marcio1002",
+            "email": "marcioalemao1999@yahoo.com"
+        }
+    ]
+}
