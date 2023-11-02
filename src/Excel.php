@@ -3,6 +3,11 @@
 namespace Marcio1002\Work;
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date;
+use PhpOffice\PhpSpreadsheet\Style\Color;
+use PhpOffice\PhpSpreadsheet\Style\Font;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class Excel
 {
@@ -84,11 +89,31 @@ class Excel
         foreach ($write_columns as $key_data => $column) {
             foreach ($data[$key_data] as $key_row => $row) {
                 $key_row += 2;
-                $worksheet->setCellValue("{$column}{$key_row}", $row);
+
+                if (!\in_array($column, ['A', 'B', 'C', 'H'])) {
+                    $worksheet->setCellValue("{$column}{$key_row}", $row);
+                    continue;
+                }
+
+                // $date = join("-", array_reverse(explode("/", $data['J'][$key_row - 2])));
+
+                $column === 'A'
+                    ? $worksheet->setCellValue("{$column}{$key_row}", Date::PHPToExcel($row))
+                    : $worksheet->setCellValue("{$column}{$key_row}", $row);
+
+                static::formateRow($worksheet, $column, $key_row);
             }
         }
 
-        $writer = IOFactory::createWriter($spreadsheet,IOFactory::READER_XLSX);
+        static::formateColumnG($worksheet, $data);
+
+        $rows = $worksheet->getHighestRow();
+        $row_total = $rows +1;
+        $worksheet->setCellValue("A$row_total", "Total");
+        $worksheet->getStyle("A$row_total")->getFont()->setBold(true);
+        $worksheet->setCellValue("H$row_total", "=SUM(H2:H$rows)");
+
+        $writer = IOFactory::createWriter($spreadsheet, IOFactory::READER_XLSX);
 
         $exts = \join("|", $GLOBALS['extensions_valid']);
         $now = \date("d_m_Y__H-i-s");
@@ -102,6 +127,30 @@ class Excel
 
         Std::write("Dados importado em \"$file_excel_imported\"");
         Std::write("Por favor verifique seu arquivo e check se está tudo OK");
+    }
+
+    private static function formateRow(Worksheet $worksheet, string $column, int $key_row): void
+    {
+        $style_col = $worksheet->getStyle("{$column}{$key_row}");
+        $style_col->getFont()->setBold(false);
+        $style_col->getFont()->setColor(new Color(Color::COLOR_BLACK));
+
+        $column === 'A'
+            ? $style_col->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_DDMMYYYY)
+            : $style_col->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_TIME3);
+    }
+
+    private static function formateColumnG(Worksheet $worksheet, array $data): void
+    {
+        foreach ($data['J'] as $key_row => $_) {
+            $key_row += 2;
+
+            $worksheet->setCellValue("G{$key_row}", "");
+            $styleG = $worksheet->getStyle("G{$key_row}");
+            $styleG->getFont()->setBold(false);
+            $styleG->getFont()->setColor(new Color(Color::COLOR_BLACK));
+            $styleG->getFont()->setUnderline(Font::UNDERLINE_NONE);
+        }
     }
 
     private static function validate(string $file): void
