@@ -2,44 +2,77 @@
 
 namespace Marcio1002\Work;
 
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Shared\Date;
 use PhpOffice\PhpSpreadsheet\Style\Color;
-use PhpOffice\PhpSpreadsheet\Style\Font;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\RichText\RichText;
+use PhpOffice\PhpSpreadsheet\Shared\Date;
 
 class Excel
 {
-    public static function import(string $readFile, string $writeFile): void
+    /**
+     * 
+     * 
+     * @var array<string, string> $write_columns 
+     */
+    private array $write_columns  = [
+        'J' => 'A',
+        'K' => 'B',
+        'M' => 'C',
+        'B' => 'D',
+        'A' => 'E',
+        'C' => 'F',
+        'N' => 'H'
+    ];
+
+    /** 
+     * Arquivos válidos para importação e exportação
+     * 
+     * @var array<string> $excel_valid
+     */
+    private array $excel_valid = [
+        IOFactory::READER_ODS,
+        IOFactory::READER_CSV,
+        IOFactory::READER_XLS,
+        IOFactory::READER_XLSX,
+    ];
+
+    /**
+     * Colunas que serão lidas no arquivo de importação
+     *
+     * @var array<string> $read_columns 
+     */
+    private array $read_columns = ['J', 'K', 'M', 'B', 'A', 'C', 'N'];
+
+
+    private function __construct()
+    {
+    }
+
+    public static function import(string $read_file, string $write_file): void
     {
         try {
-            static::validate($readFile);
-            static::validate($writeFile);
+            $self_instance  = new static();
 
-            $data = static::readExcel($readFile);
+            $self_instance->validate($read_file);
+            $self_instance->validate($write_file);
 
-            static::writeExcel($writeFile, $data);
+            $data = $self_instance->readExcel($read_file);
+
+            $self_instance->writeExcel($write_file, $data);
         } catch (\Throwable $th) {
             echo $th->getMessage();
         }
     }
 
-    private static function readExcel(string $file_excel): array
+    private function readExcel(string $file_excel): array
     {
-        $excel_valid = [
-            IOFactory::READER_ODS,
-            IOFactory::READER_CSV,
-            IOFactory::READER_XLS,
-            IOFactory::READER_XLSX,
-        ];
-
-        $read_columns = ['J', 'K', 'M', 'B', 'A', 'C', 'N'];
-
         $spreadsheet = IOFactory::load(
             filename: $file_excel,
             flags: 0,
-            readers: $excel_valid,
+            readers: $this->excel_valid,
         );
 
         $worksheet = $spreadsheet->getSheet(0);
@@ -49,7 +82,7 @@ class Excel
         foreach ($worksheet->getRowIterator() as $row) {
             if ($row->getRowIndex() === 1) continue;
 
-            foreach ($read_columns as $column) {
+            foreach ($this->read_columns as $column) {
                 if (!\key_exists($column, $data)) $data[$column] = [];
 
                 $data[$column][] = $worksheet->getCell("$column{$row->getRowIndex()}")->getValue();
@@ -59,59 +92,46 @@ class Excel
         return $data;
     }
 
-    private static function writeExcel(string $file_excel, array $data): void
+    private function writeExcel(string $file_excel, array $data): void
     {
-        $write_columns = [
-            'J' => 'A',
-            'K' => 'B',
-            'M' => 'C',
-            'B' => 'D',
-            'A' => 'E',
-            'C' => 'F',
-            'N' => 'H'
-        ];
-
-        $excel_valid = [
-            IOFactory::READER_ODS,
-            IOFactory::READER_CSV,
-            IOFactory::READER_XLS,
-            IOFactory::READER_XLSX,
-        ];
-
         $spreadsheet = IOFactory::load(
             filename: $file_excel,
             flags: 0,
-            readers: $excel_valid,
+            readers: $this->excel_valid,
         );
 
         $worksheet = $spreadsheet->getSheet(1);
 
-        foreach ($write_columns as $key_data => $column) {
+        foreach ($this->write_columns as $key_data => $column) {
             foreach ($data[$key_data] as $key_row => $row) {
+                if (empty($row?->getPlainText())) continue;
+
                 $key_row += 2;
+
+                $style_col = $worksheet->getStyle("{$column}{$key_row}");
+                $style_col->getFont()->setBold(false);
+                $style_col->getFont()->setColor(new Color(Color::COLOR_BLACK));
 
                 if (!\in_array($column, ['A', 'B', 'C', 'H'])) {
                     $worksheet->setCellValue("{$column}{$key_row}", $row);
                     continue;
                 }
 
-                // $date = join("-", array_reverse(explode("/", $data['J'][$key_row - 2])));
+                if ($column === 'A') {
+                    $row = \preg_replace("/^(\d{4})-(\d{2})-(\d{2})$/", "$3\/$2\/$1", $row->getPlainText());
+                    $row = \join(",", \explode('/', $row));
+                    $row = "=DATE($row)";
+                } else {
+                    $row  = \preg_replace("/^(\d{2}):(\d{2})$/", "$1:$2:00", $row->getPlainText());
+                    $row = \join(",", \explode(':', $row));
+                    $row = "=TIME($row)";
+                }
 
-                $column === 'A'
-                    ? $worksheet->setCellValue("{$column}{$key_row}", Date::PHPToExcel($row))
-                    : $worksheet->setCellValue("{$column}{$key_row}", $row);
+                $worksheet->setCellValueExplicit("{$column}{$key_row}", $row, DataType::TYPE_FORMULA);
 
-                static::formateRow($worksheet, $column, $key_row);
+                $this->formateRow($worksheet, $column, $key_row);
             }
         }
-
-        static::formateColumnG($worksheet, $data);
-
-        $rows = $worksheet->getHighestRow();
-        $row_total = $rows +1;
-        $worksheet->setCellValue("A$row_total", "Total");
-        $worksheet->getStyle("A$row_total")->getFont()->setBold(true);
-        $worksheet->setCellValue("H$row_total", "=SUM(H2:H$rows)");
 
         $writer = IOFactory::createWriter($spreadsheet, IOFactory::READER_XLSX);
 
@@ -129,31 +149,16 @@ class Excel
         Std::write("Por favor verifique seu arquivo e check se está tudo OK");
     }
 
-    private static function formateRow(Worksheet $worksheet, string $column, int $key_row): void
+    private function formateRow(Worksheet $worksheet, string $column, int $key_row): void
     {
         $style_col = $worksheet->getStyle("{$column}{$key_row}");
-        $style_col->getFont()->setBold(false);
-        $style_col->getFont()->setColor(new Color(Color::COLOR_BLACK));
 
         $column === 'A'
             ? $style_col->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_DDMMYYYY)
-            : $style_col->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_TIME3);
+            : $style_col->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_TIME4);
     }
 
-    private static function formateColumnG(Worksheet $worksheet, array $data): void
-    {
-        foreach ($data['J'] as $key_row => $_) {
-            $key_row += 2;
-
-            $worksheet->setCellValue("G{$key_row}", "");
-            $styleG = $worksheet->getStyle("G{$key_row}");
-            $styleG->getFont()->setBold(false);
-            $styleG->getFont()->setColor(new Color(Color::COLOR_BLACK));
-            $styleG->getFont()->setUnderline(Font::UNDERLINE_NONE);
-        }
-    }
-
-    private static function validate(string $file): void
+    private function validate(string $file): void
     {
         $fileinfo = new \SplFileInfo($file);
 
