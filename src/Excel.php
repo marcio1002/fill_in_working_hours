@@ -119,7 +119,7 @@ class Excel
 
                 if ($column === 'A') {
                     $row = \preg_replace("/^(\d{4})-(\d{2})-(\d{2})$/", "$3\/$2\/$1", $row->getPlainText());
-                    $row = \join(",", \explode('/', $row));
+                    $row = \join(",", \array_reverse(\explode('/', $row)));
                     $row = "=DATE($row)";
                 } else {
                     $row  = \preg_replace("/^(\d{2}):(\d{2})$/", "$1:$2:00", $row->getPlainText());
